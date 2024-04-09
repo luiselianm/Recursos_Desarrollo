@@ -1,79 +1,33 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
-import { CreateUserDto } from '../dto/create-user.dto';
-import { UpdateUserDto } from '../dto/update-user.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { User } from 'src/user/domain/entities/user.entity';
-import { DataSource, Repository } from 'typeorm';
+import { Injectable } from "@nestjs/common";
+import { CreateUserDto } from "src/user/application/dto/create-user.dto";
+import { UpdateUserDto } from "src/user/application/dto/update-user.dto";
+import { OrmUserRepository } from "src/user/infrastructure/repositories/orm-user.repository";
 
 @Injectable()
 export class UserService {
 
-  private readonly logger = new Logger('UserServices')
+    constructor(
+        private readonly userRepository: OrmUserRepository
+    ) { }
 
-  constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-
-    private readonly dataSource: DataSource
-  ) { }
-
-  async create(createUserDto: CreateUserDto) {
-    try {
-      const user = this.userRepository.create(createUserDto);
-      await this.userRepository.save(user);
-      return user;
-    } catch (error) {
-      this.handleDBExceptions(error)
+    create(createUserDto: CreateUserDto) {
+        return this.userRepository.create(createUserDto);
     }
-  }
 
-  async findAll() {
-    const users = await this.userRepository.find()
-    return users.map(user => ({
-      ...user
-    }))
-  }
-
-  async findOne(id: string) {
-    let user: User;
-
-    user = await this.userRepository.findOneBy({ id: id })
-
-    if (!user) throw new NotFoundException(`User with id ${id} not found`);
-
-    return user;
-  }
-
-  async update(id: string, updateUserDto: UpdateUserDto) {
-    const user = await this.userRepository.preload(updateUserDto);
-    if (!user) throw new NotFoundException(`User with id ${id} not found`);
-
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      await queryRunner.manager.save(user);
-      await queryRunner.commitTransaction();
-      await queryRunner.release();
-      return this.findOne(id);
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      await queryRunner.release();
-      this.handleDBExceptions(error);
+    findAll() {
+        return this.userRepository.findAll();
     }
-  }
 
-  async remove(id: string) {
-    const user = await this.findOne(id);
-    await this.userRepository.remove(user);
-  }
+    findOne(id: string) {
+        return this.userRepository.findOne(id);
+    }
 
-  private handleDBExceptions(error: any) {
-    if (error.code === '23505')
-      throw new BadRequestException(error.detail)
+    update(id: string, updateUserDto: UpdateUserDto) {
+        return this.userRepository.update(id, updateUserDto)
+    }
 
-    this.logger.error(error);
-    throw new InternalServerErrorException('Ayuda!')
-  }
+    remove(id: string) {
+        this.userRepository.remove(id);
+    }
+
 }
